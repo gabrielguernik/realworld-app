@@ -62,13 +62,13 @@ jobs:
       - name: RealWorld API spec (Newman)
         run: tests/api/run-api-tests.sh --reporters cli
 
-      # Local compose talks to PostgreSQL without TLS, so check the RDS CA bundle separately,
+      # Local compose talks to PostgreSQL without TLS, so check the RDS root CA separately,
       # as the image's non-root user (the distroless entrypoint is node).
-      - name: RDS CA bundle readable by the runtime user
+      - name: RDS root CA readable by the runtime user
         run: |
           docker run --rm realworld-api:local -e \
-            "const pem = require('fs').readFileSync('/app/certs/rds-global-bundle.pem', 'utf8'); \
-             if (!pem.includes('BEGIN CERTIFICATE')) process.exit(1); console.log('RDS CA bundle OK')"
+            "const pem = require('fs').readFileSync('/app/certs/rds-ca.pem', 'utf8'); \
+             if (!pem.includes('BEGIN CERTIFICATE')) process.exit(1); console.log('RDS root CA OK')"
 
       - name: API logs
         if: failure()

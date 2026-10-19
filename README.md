@@ -22,7 +22,7 @@
 | Logs | JSON on stdout (pino). Every request gets an ID (incoming `X-Request-Id` or a UUID), returned in the response and present on every log line as `reqId`. The `Authorization` header is redacted. |
 | Cache | Valkey/Redis read-through cache for `GET /api/tags` (60 s) and `GET /api/articles/:slug` (30 s). Writes invalidate through a generation counter. Fails open: with the cache down, requests are served from PostgreSQL. Cached read models hold user IDs only, never user rows. |
 | Shutdown | SIGTERM stops accepting connections, drains in-flight requests, then closes the DB pool and cache. |
-| Container | Multi-stage `Dockerfile`: `runtime` target on distroless Node.js 22 (non-root, read-only root filesystem) and a `migrate` target that runs `prisma migrate deploy`. The RDS CA bundle is baked in for verified TLS to the database. |
+| Container | Multi-stage `Dockerfile`: `runtime` target on distroless Node.js 22 (non-root, read-only root filesystem) and a `migrate` target that runs `prisma migrate deploy`. The RDS root CA (us-east-1, RSA2048 G1) is baked in for verified TLS to the database. |
 | Fixes | Tag lists are returned alphabetically (stable order, as the spec expects). A unit-test import-order bug that bypassed the Prisma mock is fixed. Vulnerable dependencies are upgraded (express 4.22, jsonwebtoken 9.0.3); axios is now dev-only. |
 | CI | `.github/workflows/ci.yml`: lint, unit tests, hadolint, the RealWorld API spec (Newman) against docker compose, a Trivy scan, and on `main` a push to ECR through GitHub OIDC (no AWS keys) with a CycloneDX SBOM. |
 
@@ -30,7 +30,7 @@
 
 | Variable | Required | Example / notes |
 |---|---|---|
-| `DATABASE_URL` | yes | `postgresql://USER:PASSWORD@HOST:5432/realworld?sslmode=require&sslcert=/app/certs/rds-global-bundle.pem&sslaccept=strict&connection_limit=5` (RDS: TLS verified against the bundled CA) |
+| `DATABASE_URL` | yes | `postgresql://USER:PASSWORD@HOST:5432/realworld?sslmode=require&sslcert=/app/certs/rds-ca.pem&sslaccept=strict&connection_limit=5` (RDS: TLS verified against the bundled CA) |
 | `JWT_SECRET` | yes | Long random string |
 | `REDIS_URL` | no | `rediss://:AUTH_TOKEN@HOST:6379` (TLS); unset disables the cache |
 | `PORT` | no | `3000` |
