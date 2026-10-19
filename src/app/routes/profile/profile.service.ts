@@ -1,6 +1,7 @@
 import prisma from '../../../prisma/prisma-client';
 import profileMapper from './profile.utils';
 import HttpException from '../../models/http-exception.model';
+import { invalidateArticles } from '../../cache';
 
 export const getProfile = async (usernamePayload: string, id?: number) => {
   const profile = await prisma.user.findUnique({
@@ -36,6 +37,7 @@ export const followUser = async (usernamePayload: string, id: number) => {
     },
   });
 
+  await invalidateArticles();
   return profileMapper(profile, id);
 };
 
@@ -56,5 +58,6 @@ export const unfollowUser = async (usernamePayload: string, id: number) => {
     },
   });
 
+  await invalidateArticles();
   return profileMapper(profile, id);
 };

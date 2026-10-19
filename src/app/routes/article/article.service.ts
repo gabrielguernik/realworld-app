@@ -4,6 +4,9 @@ import HttpException from '../../models/http-exception.model';
 import profileMapper from '../profile/profile.utils';
 import articleMapper from './article.mapper';
 import { Tag } from '../tag/tag.model';
+import { cached, invalidateArticles } from '../../cache';
+
+const ARTICLE_TTL_SECONDS = 30;
 
 const buildFindAllQuery = (query: any, id: number | undefined) => {
   const queries: any = [];
@@ -235,40 +238,41 @@ export const createArticle = async (article: any, id: number) => {
     },
   });
 
+  await invalidateArticles();
   return articleMapper(createdArticle, id);
 };
 
 export const getArticle = async (slug: string, id?: number) => {
-  const article = await prisma.article.findUnique({
-    where: {
-      slug,
-    },
-    include: {
-      tagList: {
-        select: {
-          name: true,
-        },
+  // The cached read model is the same for every caller: users are reduced to their ids, and
+  // favorited/following are computed per request by the mapper.
+  const article = await cached('article', slug, ARTICLE_TTL_SECONDS, async () => {
+    const found = await prisma.article.findUnique({
+      where: {
+        slug,
       },
-      author: {
-        select: {
-          username: true,
-          bio: true,
-          image: true,
-          followedBy: true,
+      include: {
+        tagList: {
+          select: {
+            name: true,
+          },
         },
-      },
-      favoritedBy: true,
-      _count: {
-        select: {
-          favoritedBy: true,
+        author: {
+          select: {
+            username: true,
+            bio: true,
+            image: true,
+            followedBy: { select: { id: true } },
+          },
         },
+        favoritedBy: { select: { id: true } },
       },
-    },
-  });
+    });
 
-  if (!article) {
-    throw new HttpException(404, { errors: { article: ['not found'] } });
-  }
+    if (!found) {
+      throw new HttpException(404, { errors: { article: ['not found'] } });
+    }
+    return found;
+  });
 
   return articleMapper(article, id);
 };
@@ -379,6 +383,7 @@ export const updateArticle = async (article: any, slug: string, id: number) => {
     },
   });
 
+  await invalidateArticles();
   return articleMapper(updatedArticle, id);
 };
 
@@ -411,6 +416,7 @@ export const deleteArticle = async (slug: string, id: number) => {
       slug,
     },
   });
+  await invalidateArticles();
 };
 
 export const getCommentsByArticle = async (slug: string, id?: number) => {
@@ -597,11 +603,12 @@ export const favoriteArticle = async (slugPayload: string, id: number) => {
   const result = {
     ...article,
     author: profileMapper(article.author, id),
-    tagList: article?.tagList.map((tag: Tag) => tag.name),
+    tagList: article?.tagList.map((tag: Tag) => tag.name).sort(),
     favorited: article.favoritedBy.some((favorited: any) => favorited.id === id),
     favoritesCount: _count?.favoritedBy,
   };
 
+  await invalidateArticles();
   return result;
 };
 
@@ -643,10 +650,11 @@ export const unfavoriteArticle = async (slugPayload: string, id: number) => {
   const result = {
     ...article,
     author: profileMapper(article.author, id),
-    tagList: article?.tagList.map((tag: Tag) => tag.name),
+    tagList: article?.tagList.map((tag: Tag) => tag.name).sort(),
     favorited: article.favoritedBy.some((favorited: any) => favorited.id === id),
     favoritesCount: _count?.favoritedBy,
   };
 
+  await invalidateArticles();
   return result;
 };

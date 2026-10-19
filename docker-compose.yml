@@ -1,0 +1,63 @@
+# Local stack: PostgreSQL + Valkey + migrations + the API, built from this repo.
+#
+#   docker compose up --build -d
+#   tests/api/run-api-tests.sh
+#   docker compose down -v
+#
+# The API container runs like it does in Kubernetes: non-root, read-only root filesystem, no capabilities.
+name: realworld
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: realworld
+      POSTGRES_PASSWORD: realworld
+      POSTGRES_DB: realworld
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U realworld -d realworld"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  valkey:
+    image: valkey/valkey:8.1
+    command: ["valkey-server", "--requirepass", "local-only-password"]
+    healthcheck:
+      test: ["CMD", "valkey-cli", "-a", "local-only-password", "--no-auth-warning", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    image: realworld-migrate:local
+    build:
+      context: .
+      target: migrate
+    environment:
+      DATABASE_URL: postgresql://realworld:realworld@postgres:5432/realworld
+    read_only: true
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: realworld-api:local
+    build:
+      context: .
+      target: runtime
+    environment:
+      DATABASE_URL: postgresql://realworld:realworld@postgres:5432/realworld?connection_limit=5
+      REDIS_URL: redis://:local-only-password@valkey:6379
+      JWT_SECRET: local-only-jwt-secret
+      LOG_LEVEL: info
+    ports:
+      - "3000:3000"
+    read_only: true
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      valkey:
+        condition: service_healthy

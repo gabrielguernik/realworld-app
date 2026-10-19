@@ -1,0 +1,14 @@
+.git
+.github
+.vscode
+node_modules
+dist
+coverage
+tmp
+e2e
+tests
+*.md
+docker-compose.yml
+Dockerfile
+.dockerignore
+.nx

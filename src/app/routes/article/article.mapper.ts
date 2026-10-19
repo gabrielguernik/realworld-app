@@ -5,7 +5,8 @@ const articleMapper = (article: any, id?: number) => ({
   title: article.title,
   description: article.description,
   body: article.body,
-  tagList: article.tagList.map((tag: any) => tag.name),
+  // Alphabetical: the join table has no order, and the RealWorld spec expects a stable one.
+  tagList: article.tagList.map((tag: any) => tag.name).sort(),
   createdAt: article.createdAt,
   updatedAt: article.updatedAt,
   favorited: article.favoritedBy.some((item: any) => item.id === id),
