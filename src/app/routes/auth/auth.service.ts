@@ -5,6 +5,7 @@ import HttpException from '../../models/http-exception.model';
 import { RegisteredUser } from './registered-user.model';
 import generateToken from './token.utils';
 import { User } from './user.model';
+import { invalidateArticles } from '../../cache';
 
 const checkUserUniqueness = async (email: string, username: string) => {
   const existingUserByEmail = await prisma.user.findUnique({
@@ -175,6 +176,9 @@ export const updateUser = async (userPayload: any, id: number) => {
       image: true,
     },
   });
+
+  // Username, bio and image appear in article author data.
+  await invalidateArticles();
 
   return {
     ...user,

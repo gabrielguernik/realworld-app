@@ -5,7 +5,8 @@ datasource db {
 
 generator client {
   provider        = "prisma-client-js"
-  previewFeatures = []
+  previewFeatures = ["metrics"]
+  binaryTargets   = ["native", "debian-openssl-3.0.x"]
 }
 
 model Article {
