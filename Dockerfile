@@ -31,9 +31,21 @@ COPY . .
 RUN npx prisma generate \
  && npx nx build api --configuration=production --skip-nx-cache \
  && npm prune --omit=dev --no-audit --no-fund
-# Amazon RDS CA bundle, so the API can verify the database certificate (sslaccept=strict).
-# ADD from a URL creates a root-only (0600) file; the non-root runtime user must be able to read it.
-ADD --chmod=0644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem
+# RDS root CA, so the API can verify the database certificate (sslaccept=strict).
+# Prisma's engine reads only the FIRST certificate of `sslcert`, so a multi-CA bundle does not work: extract
+# exactly the root of the CA the instance uses (infra pins ca_cert_identifier = rds-ca-rsa2048-g1).
+ARG RDS_REGION=us-east-1
+ARG RDS_CA_CN="Amazon RDS ${RDS_REGION} Root CA RSA2048 G1"
+ADD --chmod=0644 https://truststore.pki.rds.amazonaws.com/${RDS_REGION}/${RDS_REGION}-bundle.pem /tmp/rds-bundle.pem
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN mkdir -p /app/certs /tmp/rdsca \
+ && csplit -s -z -f /tmp/rdsca/cert- /tmp/rds-bundle.pem '/-----BEGIN CERTIFICATE-----/' '{*}' \
+ && for f in /tmp/rdsca/cert-*; do \
+      if openssl x509 -in "$f" -noout -subject -nameopt multiline | grep -qx "    commonName *= *${RDS_CA_CN}"; then \
+        install -m 0644 "$f" /app/certs/rds-ca.pem; \
+      fi; \
+    done \
+ && openssl x509 -in /app/certs/rds-ca.pem -noout -subject
 
 # --- migrate: Prisma CLI + migrations only --------------------------------------------------
 FROM base AS migrate
