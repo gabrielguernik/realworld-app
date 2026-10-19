@@ -32,7 +32,8 @@ RUN npx prisma generate \
  && npx nx build api --configuration=production --skip-nx-cache \
  && npm prune --omit=dev --no-audit --no-fund
 # Amazon RDS CA bundle, so the API can verify the database certificate (sslaccept=strict).
-ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem
+# ADD from a URL creates a root-only (0600) file; the non-root runtime user must be able to read it.
+ADD --chmod=0644 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/certs/rds-global-bundle.pem
 
 # --- migrate: Prisma CLI + migrations only --------------------------------------------------
 FROM base AS migrate
