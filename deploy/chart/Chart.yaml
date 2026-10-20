@@ -1,0 +1,7 @@
+apiVersion: v2
+name: realworld-api
+description: >-
+  RealWorld API: Deployment, Service and ALB Ingress, credentials from AWS Secrets Manager through External Secrets,
+  and a migration Job that runs before each rollout. Deployed by ArgoCD from this repo at the same commit as the image.
+type: application
+version: 1.0.0

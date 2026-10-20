@@ -1,0 +1,44 @@
+# Applies pending Prisma migrations as realworld_migrator before the Deployment rolls (Sync hook, wave 0, after the
+# ExternalSecrets in wave -1). Not PreSync: PreSync hooks run before any resource exists, so on a first sync the
+# credentials Secret would be missing. A failed migration stops the sync and the previous pods keep serving.
+# Migrations must stay compatible with the previous release, which is still running while they apply.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: realworld-migrate
+  labels: {{- include "realworld.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: realworld-migrate
+        app.kubernetes.io/part-of: realworld
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000 # node user in the migrate image
+        runAsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: migrate
+          image: "{{ .Values.image.repository }}:migrate-{{ include "realworld.tag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          envFrom:
+            - secretRef: { name: realworld-migrate }
+          env:
+            - { name: HOME, value: /tmp }
+          securityContext: {{- include "realworld.containerSecurityContext" . | nindent 12 }}
+          resources: {{- toYaml .Values.migrateResources | nindent 12 }}
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: tmp
+          emptyDir: {}

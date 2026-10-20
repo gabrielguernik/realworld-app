@@ -1,0 +1,47 @@
+{{- if .Values.ingress.enabled }}
+{{- $i := .Values.ingress }}
+{{- if not (and $i.host $i.securityGroup) }}
+{{- fail "ingress.host and ingress.securityGroup are required" }}
+{{- end }}
+# Internet-facing ALB, TLS terminated with the ACM certificate the controller finds for the host. Only the
+# Terraform-owned security group is used and the controller never edits security groups (sg-app already allows
+# the ALB on 3000). /metrics is not routed: it stays inside the cluster.
+{{- $attrs := list "routing.http.drop_invalid_header_fields.enabled=true" }}
+{{- with $i.accessLogs }}
+{{- $parts := splitn "/" 2 . }}
+{{- $attrs = concat $attrs (list "access_logs.s3.enabled=true" (printf "access_logs.s3.bucket=%s" $parts._0) (printf "access_logs.s3.prefix=%s" $parts._1)) }}
+{{- end }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: realworld-api
+  labels: {{- include "realworld.labels" . | nindent 4 }}
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/security-groups: {{ $i.securityGroup }}
+    alb.ingress.kubernetes.io/manage-backend-security-group-rules: "false"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/ssl-policy: {{ $i.sslPolicy }}
+    alb.ingress.kubernetes.io/healthcheck-path: /readyz
+    alb.ingress.kubernetes.io/healthcheck-interval-seconds: "10"
+    alb.ingress.kubernetes.io/healthy-threshold-count: "2"
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=15
+    alb.ingress.kubernetes.io/load-balancer-attributes: {{ join "," $attrs }}
+spec:
+  ingressClassName: alb
+  rules:
+    - host: {{ $i.host }}
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend: { service: { name: realworld-api, port: { name: http } } }
+          - path: /healthz
+            pathType: Exact
+            backend: { service: { name: realworld-api, port: { name: http } } }
+          - path: /readyz
+            pathType: Exact
+            backend: { service: { name: realworld-api, port: { name: http } } }
+{{- end }}

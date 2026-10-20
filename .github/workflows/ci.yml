@@ -1,9 +1,11 @@
 # CI for the RealWorld API.
 #
-#   pull_request -> lint + unit tests, hadolint, image build, RealWorld API spec (Newman) against docker compose,
-#                   Trivy image scan
+#   pull_request -> lint + unit tests, hadolint, Helm chart lint, image build, RealWorld API spec (Newman) against
+#                   docker compose, Trivy image scan
 #   push to main -> the same, then publish: push realworld-api:<sha> and realworld-api:migrate-<sha> to ECR
-#                   via GitHub OIDC (role ci/ci-build, no stored AWS keys), and attach a CycloneDX SBOM.
+#                   via GitHub OIDC (role ci/ci-build, no stored AWS keys), and attach a CycloneDX SBOM;
+#                   then deploy-sandbox: set revision=<sha> in the gitops repo's sandbox config, which ArgoCD
+#                   deploys (chart at this commit + these images).
 #
 # Third-party actions are pinned to commit SHAs (tag in the trailing comment).
 
@@ -50,6 +52,17 @@ jobs:
         with:
           dockerfile: Dockerfile
 
+  chart:
+    name: Helm chart lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # helm and yq are preinstalled on GitHub-hosted runners.
+      - name: Lint and render with sample values
+        run: |
+          helm lint deploy/chart -f deploy/ci-values.yaml
+          helm template realworld deploy/chart -n realworld -f deploy/ci-values.yaml > /dev/null
+
   api-spec:
     name: image build, API spec and scan
     runs-on: ubuntu-latest
@@ -88,7 +101,7 @@ jobs:
   publish:
     name: publish to ECR
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [lint-test, hadolint, api-spec]
+    needs: [lint-test, hadolint, chart, api-spec]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -146,3 +159,40 @@ jobs:
             echo "- \`${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}\`"
             echo "- \`${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:migrate-${{ github.sha }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Continuous deployment to the sandbox: commit the new revision to the gitops repo. The deploy key can write
+  # to gitops only, and lives in the "sandbox" environment, which only main can use (PR workflows can't read it).
+  # Prod would open a PR to its own config file instead of pushing.
+  deploy-sandbox:
+    name: deploy to sandbox (gitops bump)
+    needs: [publish]
+    runs-on: ubuntu-latest
+    environment: sandbox
+    concurrency:
+      group: deploy-sandbox
+      cancel-in-progress: false
+    env:
+      CONFIG: clusters/sandbox-us-east-1/apps/config/realworld.yaml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: gabrielguernik/gitops
+          ref: main
+          ssh-key: ${{ secrets.GITOPS_DEPLOY_KEY }}
+
+      - name: Set revision and push
+        env:
+          SHA: ${{ github.sha }}
+          SOURCE: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+        run: |
+          yq -i '.revision = strenv(SHA)' "$CONFIG"
+          if git diff --quiet; then echo "already at $SHA"; exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "realworld: deploy ${SHA::7} to sandbox-us-east-1" -m "Source: $SOURCE"
+          # Another push can land between checkout and push; rebase and retry.
+          for attempt in 1 2 3; do
+            git push origin HEAD:main && exit 0
+            git pull --rebase origin main
+          done
+          exit 1
