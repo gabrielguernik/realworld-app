@@ -17,6 +17,13 @@ spec:
   template:
     metadata:
       labels: {{- include "realworld.labels" . | nindent 8 }}
+      {{- if .Values.metrics.scrape }}
+      annotations:
+        # Grafana Alloy (a platform component) scrapes pods that carry these annotations into Amazon Managed Prometheus.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: /metrics
+      {{- end }}
     spec:
       serviceAccountName: default
       automountServiceAccountToken: false

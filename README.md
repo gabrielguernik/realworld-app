@@ -76,6 +76,11 @@ platform's `db-bootstrap` grants `realworld_app` access to new tables automatica
 chart and the images to the previous commit. Migrations are not reverted: they are forward-only, which is why they
 must stay compatible with the previous release.
 
+**Monitoring:** the pods carry `prometheus.io/*` annotations, so the platform's Grafana Alloy scrapes `/metrics` into
+Amazon Managed Prometheus (setting `metrics.scrape`). The chart ships no dashboards or alerts: the dashboards are in
+gitops (`charts/grafana-dashboards`) and the alert rules in infra (`modules/prometheus-alerts`). Both use the metric
+names in `src/app/metrics.ts`, so renaming a metric or a label means updating them in the same change.
+
 **Chart values** that differ per cluster (image repository, sizing, secret names, hostname, ALB security group,
 access-log bucket) are set in the gitops config file; `deploy/ci-values.yaml` is a sample used by CI to lint the chart.
 
