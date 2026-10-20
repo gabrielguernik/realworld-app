@@ -19,6 +19,12 @@ migrateResources:
 
 logLevel: info
 
+# Prometheus scraping of /metrics (port 3000, never routed by the Ingress). The platform's dashboards and the alert
+# rules in infra (modules/prometheus-alerts) use these metric names: renaming a metric or label in
+# src/app/metrics.ts means updating them too.
+metrics:
+  scrape: true
+
 # Connections each pod opens to PostgreSQL (Prisma connection_limit). replicas x this must stay below the
 # realworld_app role's connection limit, set by the platform's db-bootstrap.
 dbConnectionLimit: 5
