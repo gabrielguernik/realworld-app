@@ -72,6 +72,10 @@ with the code before it (expand/contract). Add a column, deploy code that writes
 rename the old column in a later release. Migrations run as `realworld_migrator`, which owns the schema; the
 platform's `db-bootstrap` grants `realworld_app` access to new tables automatically.
 
+**Rollback:** revert the deploy commit in gitops (`git revert <sha>` of "realworld: deploy ..."). ArgoCD returns the
+chart and the images to the previous commit. Migrations are not reverted: they are forward-only, which is why they
+must stay compatible with the previous release.
+
 **Chart values** that differ per cluster (image repository, sizing, secret names, hostname, ALB security group,
 access-log bucket) are set in the gitops config file; `deploy/ci-values.yaml` is a sample used by CI to lint the chart.
 
