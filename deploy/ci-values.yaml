@@ -1,0 +1,15 @@
+# Sample values for linting the chart in CI. Real values per cluster live in the gitops repo
+# (clusters/<cluster>/apps/config/realworld.yaml).
+revision: 0123456789abcdef0123456789abcdef01234567
+image:
+  repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/realworld-api
+secrets:
+  roleArn: arn:aws:iam::123456789012:role/irsa/example-secrets-realworld
+  region: us-east-1
+  app: example/realworld/app
+  db: example/realworld/db-app
+  migrator: example/realworld/db-migrator
+ingress:
+  host: api.example.com
+  securityGroup: example-alb
+  accessLogs: example-logs/alb/example

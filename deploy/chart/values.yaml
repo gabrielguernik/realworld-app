@@ -1,0 +1,40 @@
+# Git commit this chart is deployed from. The gitops ApplicationSet sets it from the cluster's config file; it is
+# also the image tag, because CI builds realworld-api:<commit> and realworld-api:migrate-<commit> from the same commit.
+revision: ""
+
+image:
+  repository: ""        # e.g. <account>.dkr.ecr.<region>.amazonaws.com/realworld-api
+  tag: ""               # defaults to revision
+  pullPolicy: IfNotPresent
+
+replicas: 2
+
+resources:
+  requests: { cpu: 100m, memory: 128Mi }
+  limits: { memory: 256Mi }
+
+migrateResources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { memory: 512Mi }
+
+logLevel: info
+
+# Connections each pod opens to PostgreSQL (Prisma connection_limit). replicas x this must stay below the
+# realworld_app role's connection limit, set by the platform's db-bootstrap.
+dbConnectionLimit: 5
+
+# AWS Secrets Manager, read through External Secrets with this namespace's own IRSA role.
+secrets:
+  roleArn: ""           # IRSA role of the secrets-reader service account
+  region: ""
+  app: ""               # {JWT_SECRET, REDIS_AUTH_TOKEN, REDIS_HOST, REDIS_PORT}
+  db: ""                # realworld_app credentials {username, password, host, port, dbname}
+  migrator: ""          # realworld_migrator credentials, same shape
+  refreshInterval: 1h
+
+ingress:
+  enabled: true
+  host: ""              # public hostname; ExternalDNS publishes it and the ACM certificate is discovered from it
+  securityGroup: ""     # name or ID of the Terraform-owned ALB security group
+  sslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
+  accessLogs: ""        # <bucket>/<prefix>; empty disables ALB access logs

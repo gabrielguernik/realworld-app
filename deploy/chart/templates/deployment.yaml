@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: realworld-api
+  labels: {{- include "realworld.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    reloader.stakater.com/auto: "true" # roll when realworld-api's Secret changes (password or token change)
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+  selector:
+    matchLabels: {{- include "realworld.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "realworld.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: default
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532 # distroless nonroot
+        runAsGroup: 65532
+        seccompProfile: { type: RuntimeDefault }
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {{- include "realworld.selector" . | nindent 14 }}
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: {{- include "realworld.selector" . | nindent 14 }}
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ include "realworld.tag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - { name: http, containerPort: 3000 }
+          env:
+            - { name: LOG_LEVEL, value: {{ .Values.logLevel | quote }} }
+          envFrom:
+            - secretRef: { name: realworld-api }
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            # Keep serving while the ALB deregisters the target; the app then drains on SIGTERM.
+            preStop:
+              sleep: { seconds: 10 }
+          securityContext: {{- include "realworld.containerSecurityContext" . | nindent 12 }}
+          resources: {{- toYaml .Values.resources | nindent 12 }}

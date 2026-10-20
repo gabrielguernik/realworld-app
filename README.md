@@ -24,7 +24,8 @@
 | Shutdown | SIGTERM stops accepting connections, drains in-flight requests, then closes the DB pool and cache. |
 | Container | Multi-stage `Dockerfile`: `runtime` target on distroless Node.js 22 (non-root, read-only root filesystem) and a `migrate` target that runs `prisma migrate deploy`. The RDS root CA (us-east-1, RSA2048 G1) is baked in for verified TLS to the database. |
 | Fixes | Tag lists are returned alphabetically (stable order, as the spec expects). A unit-test import-order bug that bypassed the Prisma mock is fixed. Vulnerable dependencies are upgraded (express 4.22, jsonwebtoken 9.0.3); axios is now dev-only. |
-| CI | `.github/workflows/ci.yml`: lint, unit tests, hadolint, the RealWorld API spec (Newman) against docker compose, a Trivy scan, and on `main` a push to ECR through GitHub OIDC (no AWS keys) with a CycloneDX SBOM. |
+| CI | `.github/workflows/ci.yml`: lint, unit tests, hadolint, Helm chart lint, the RealWorld API spec (Newman) against docker compose, a Trivy scan, and on `main` a push to ECR through GitHub OIDC (no AWS keys) with a CycloneDX SBOM, then a deploy to the sandbox through the gitops repo. |
+| Deploy | Helm chart in `deploy/chart`, deployed by ArgoCD from this repo at the same commit as the image (see [Deployment](#deployment)). |
 
 ## Configuration
 
@@ -46,6 +47,33 @@ docker compose down -v
 ```
 
 Unit tests and lint: `npm ci && npx prisma generate && npx nx test api && npx nx lint api`.
+
+## Deployment
+
+The chart in `deploy/chart` is deployed by ArgoCD. Each cluster's settings live in the
+[gitops](https://github.com/gabrielguernik/gitops) repo, in `clusters/<cluster>/apps/config/realworld.yaml`. That
+file's `revision` is a commit of this repo, and it selects both the chart (`deploy/chart` at that commit) and the
+images (`realworld-api:<revision>`, `realworld-api:migrate-<revision>`). Code, migrations, images and chart therefore
+always come from one commit, and a rollback is a revert of one line in gitops.
+
+**Flow on merge to `main`:** CI publishes both images, then the `deploy-sandbox` job sets `revision` to the new
+commit in the sandbox config and pushes to gitops. The deploy key it uses can only write to gitops and lives in the
+`sandbox` GitHub environment, which only `main` can use. ArgoCD then:
+
+1. syncs the two ExternalSecrets, which build `DATABASE_URL`, `REDIS_URL` and `JWT_SECRET` from AWS Secrets Manager
+   through this namespace's own IAM role (it can't read anything else);
+2. runs the `realworld-migrate` Job (`prisma migrate deploy` as the PostgreSQL role `realworld_migrator`). If it
+   fails, the sync stops and the running pods are untouched;
+3. rolls the Deployment (pods connect as `realworld_app`, which has data access only: no DDL). The ALB health
+   check (`/readyz`) and pod readiness gates keep old pods serving until new ones receive traffic.
+
+**Rules for migrations:** the previous release keeps running while a migration applies, so every migration must work
+with the code before it (expand/contract). Add a column, deploy code that writes it, backfill, and only drop or
+rename the old column in a later release. Migrations run as `realworld_migrator`, which owns the schema; the
+platform's `db-bootstrap` grants `realworld_app` access to new tables automatically.
+
+**Chart values** that differ per cluster (image repository, sizing, secret names, hostname, ALB security group,
+access-log bucket) are set in the gitops config file; `deploy/ci-values.yaml` is a sample used by CI to lint the chart.
 
 ---
 
