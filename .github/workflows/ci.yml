@@ -15,6 +15,8 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Re-run the main pipeline (publish + deploy) when a push didn't trigger it. Publish and deploy run for main only.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -108,7 +110,7 @@ jobs:
 
   publish:
     name: publish to ECR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [lint-test, hadolint, chart, api-spec]
     runs-on: ubuntu-latest
     permissions:
