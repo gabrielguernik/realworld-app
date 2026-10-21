@@ -25,8 +25,8 @@ logLevel: info
 metrics:
   scrape: true
 
-# Connections each pod opens to PostgreSQL (Prisma connection_limit). replicas x this must stay below the
-# realworld_app role's connection limit, set by the platform's db-bootstrap.
+# Connections each pod opens to PostgreSQL (Prisma connection_limit). (replicas + 1 surge pod during a rollout) x
+# this must stay below the realworld_app role's connection limit, set by the platform's db-bootstrap.
 dbConnectionLimit: 5
 
 # AWS Secrets Manager, read through External Secrets with this namespace's own IRSA role.

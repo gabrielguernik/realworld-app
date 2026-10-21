@@ -86,7 +86,10 @@ access-log bucket) are set in the gitops config file; `deploy/ci-values.yaml` is
 
 ---
 
-## Getting Started
+## Getting Started (upstream, without containers)
+
+> These sections are from the upstream project: running the API directly on your machine with a `.env` file.
+> For this fork, prefer "Run it locally" (docker compose) above; deployments go through CI and ArgoCD ("Deployment").
 
 ### Prerequisites
 
@@ -140,15 +143,4 @@ The project includes a seed script to populate the database:
 
 ```shell
 npx prisma db seed
-```
-
-## Deploy on a remote server
-
-Run the following command to:
-- install dependencies
-- apply any new migration sql scripts
-- run the server
-
-```shell
-npm ci && npx prisma migrate deploy && node dist/api/main.js
 ```

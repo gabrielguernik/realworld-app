@@ -30,7 +30,7 @@ services:
       retries: 30
 
   migrate:
-    image: realworld-migrate:local
+    image: realworld-api:migrate-local
     build:
       context: .
       target: migrate

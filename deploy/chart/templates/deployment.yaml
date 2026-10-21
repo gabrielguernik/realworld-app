@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: realworld-api
-  labels: {{- include "realworld.labels" . | nindent 4 }}
+  labels: {{- include "realworld.labels" (dict "ctx" . "component" "api") | nindent 4 }}
   annotations:
     argocd.argoproj.io/sync-wave: "1"
     reloader.stakater.com/auto: "true" # roll when realworld-api's Secret changes (password or token change)
@@ -16,7 +16,7 @@ spec:
     matchLabels: {{- include "realworld.selector" . | nindent 6 }}
   template:
     metadata:
-      labels: {{- include "realworld.labels" . | nindent 8 }}
+      labels: {{- include "realworld.labels" (dict "ctx" . "component" "api") | nindent 8 }}
       {{- if .Values.metrics.scrape }}
       annotations:
         # Grafana Alloy (a platform component) scrapes pods that carry these annotations into Amazon Managed Prometheus.
@@ -27,7 +27,8 @@ spec:
     spec:
       serviceAccountName: default
       automountServiceAccountToken: false
-      terminationGracePeriodSeconds: 30
+      # preStop 10 s + the app's own drain timeout (20 s) + margin, so the app exits before SIGKILL.
+      terminationGracePeriodSeconds: 35
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532 # distroless nonroot
@@ -56,6 +57,7 @@ spec:
             - secretRef: { name: realworld-api }
           readinessProbe:
             httpGet: { path: /readyz, port: http }
+            timeoutSeconds: 2 # /readyz answers within ~800 ms, also when PostgreSQL hangs
             periodSeconds: 5
             failureThreshold: 3
           livenessProbe:

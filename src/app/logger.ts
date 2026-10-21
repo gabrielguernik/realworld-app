@@ -35,7 +35,7 @@ export const httpLogger = pinoHttp({
     return 'info';
   },
   autoLogging: {
-    ignore: (req) => quietPaths.has(req.url ?? ''),
+    ignore: (req) => quietPaths.has((req.url ?? '').split('?')[0]),
   },
 });
 

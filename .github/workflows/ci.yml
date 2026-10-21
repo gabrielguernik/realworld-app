@@ -87,10 +87,18 @@ jobs:
         if: failure()
         run: docker compose logs --no-color
 
-      - name: Trivy image scan (fixable HIGH/CRITICAL fail the build)
+      - name: Trivy scan, runtime image (fixable HIGH/CRITICAL fail the build)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: realworld-api:local
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Trivy scan, migrate image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: realworld-api:migrate-local
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
@@ -118,7 +126,22 @@ jobs:
       - id: ecr
         uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
 
+      # Tags are immutable in ECR: a re-run after a partial publish skips the images already pushed.
+      - id: exists
+        name: Images already in ECR
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          check() {
+            if aws ecr describe-images --repository-name "$ECR_REPOSITORY" --image-ids "imageTag=$2" >/dev/null 2>&1; then
+              echo "$1=true" >>"$GITHUB_OUTPUT"; echo "$2 already pushed"
+            fi
+          }
+          check runtime "$SHA"
+          check migrate "migrate-$SHA"
+
       - name: Push runtime image
+        if: steps.exists.outputs.runtime != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -128,8 +151,10 @@ jobs:
           provenance: false
           tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
           cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Push migrate image
+        if: steps.exists.outputs.migrate != 'true'
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
@@ -139,6 +164,7 @@ jobs:
           provenance: false
           tags: ${{ steps.ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:migrate-${{ github.sha }}
           cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: SBOM (CycloneDX)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
