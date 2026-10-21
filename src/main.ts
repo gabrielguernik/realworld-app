@@ -52,9 +52,15 @@ app.use(
     } else if (err && err.errorCode) {
       // @ts-ignore
       res.status(err.errorCode).json(err.message);
+      // @ts-ignore
+    } else if (err && err.status >= 400 && err.status < 500) {
+      // Client errors raised by middleware (e.g. malformed JSON from body-parser): not a server fault.
+      // @ts-ignore
+      res.status(err.status).json(err.message);
     } else if (err) {
+      // Log the detail; don't send internals (e.g. Prisma errors) to the client.
       req.log.error({ err }, 'unhandled error');
-      res.status(500).json(err.message);
+      res.status(500).json('internal server error');
     }
   },
 );

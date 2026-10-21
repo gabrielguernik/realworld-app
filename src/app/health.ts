@@ -20,17 +20,23 @@ router.get('/healthz', (_req: Request, res: Response) => {
  * because the API keeps serving (from PostgreSQL) without it. A failure is logged with its reason.
  */
 router.get('/readyz', async (req: Request, res: Response) => {
-  const cache = await cacheStatus();
-  try {
-    await withTimeout(prisma.$queryRaw`SELECT 1`, 1000);
+  // Both checks run in parallel and finish within ~800 ms, under the kubelet's probe timeout (2 s).
+  const [cache, database] = await Promise.all([
+    cacheStatus(),
+    withTimeout(prisma.$queryRaw`SELECT 1`, 800).then(
+      () => null,
+      (error: Error) => error.message,
+    ),
+  ]);
+  if (database === null) {
     res.json({ status: 'ok', database: 'ok', cache });
-  } catch (error) {
-    const database = (error as Error).message;
-    // Probes are left out of the access log, so log why this pod is out of rotation: at 3am this line is the
-    // difference between "pods are unready" and "pods can't reach PostgreSQL".
-    req.log.warn({ database, cache }, 'not ready: database check failed');
-    res.status(503).json({ status: 'unavailable', database, cache });
+    return;
   }
+  // Probes are left out of the access log, so log why this pod is out of rotation: at 3am this line is the
+  // difference between "pods are unready" and "pods can't reach PostgreSQL". The response stays generic: the
+  // error can name the database host.
+  req.log.warn({ database, cache }, 'not ready: database check failed');
+  res.status(503).json({ status: 'unavailable', database: 'error', cache });
 });
 
 export default router;

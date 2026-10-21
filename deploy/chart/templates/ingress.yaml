@@ -5,7 +5,8 @@
 {{- end }}
 # Internet-facing ALB, TLS terminated with the ACM certificate the controller finds for the host. Only the
 # Terraform-owned security group is used and the controller never edits security groups (sg-app already allows
-# the ALB on 3000). /metrics is not routed: it stays inside the cluster.
+# the ALB on 3000). Only /api is routed: /metrics, /healthz and /readyz stay inside the cluster (the ALB health
+# check calls the targets directly and needs no rule).
 {{- $attrs := list "routing.http.drop_invalid_header_fields.enabled=true" }}
 {{- with $i.accessLogs }}
 {{- $parts := splitn "/" 2 . }}
@@ -37,11 +38,5 @@ spec:
         paths:
           - path: /api
             pathType: Prefix
-            backend: { service: { name: realworld-api, port: { name: http } } }
-          - path: /healthz
-            pathType: Exact
-            backend: { service: { name: realworld-api, port: { name: http } } }
-          - path: /readyz
-            pathType: Exact
             backend: { service: { name: realworld-api, port: { name: http } } }
 {{- end }}

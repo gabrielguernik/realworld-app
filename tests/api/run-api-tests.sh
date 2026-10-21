@@ -17,7 +17,7 @@ DELAY_REQUEST="${DELAY_REQUEST:-}"
 
 # Wait up to 60 s for the API to answer.
 for _ in $(seq 1 60); do
-  curl -fsS "${APIURL%/api}/healthz" >/dev/null 2>&1 && break
+  curl -fsS "${APIURL}/tags" >/dev/null 2>&1 && break
   sleep 1
 done
 

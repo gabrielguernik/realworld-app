@@ -12,3 +12,7 @@ docker-compose.yml
 Dockerfile
 .dockerignore
 .nx
+# Local secrets never enter the build context
+.env*
+*.pem
+.npmrc
